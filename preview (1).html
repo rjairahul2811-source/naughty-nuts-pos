@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Naughty Nuts Cafe POS</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #f5f5f5;
+    padding: 20px;
+}
+
+.container {
+    max-width: 500px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+h1 {
+    text-align: center;
+}
+
+input {
+    width: 45%;
+    padding: 8px;
+    margin: 5px 2%;
+}
+
+.full { width: 94%; }
+
+button {
+    padding: 10px;
+    width: 100%;
+    background: black;
+    color: white;
+    border: none;
+    margin-top: 10px;
+    cursor: pointer;
+}
+
+table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+}
+
+th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 8px;
+}
+
+.total {
+    text-align: right;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* dropdown */
+.suggestions {
+    background: white;
+    border: 1px solid #ccc;
+    max-height: 120px;
+    overflow-y: auto;
+    position: absolute;
+    width: 43%;
+}
+
+.suggestions div {
+    padding: 5px;
+    cursor: pointer;
+}
+
+.suggestions div:hover {
+    background: #eee;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>NAUGHTY NUTS CAFE</h1>
+
+    <input class="full" id="customer" placeholder="Customer Name">
+    <input class="full" id="table" placeholder="Table Number">
+
+    <div style="position:relative;">
+        <input type="text" id="itemName" placeholder="Item Name" onkeyup="showSuggestions()">
+        <div id="suggestions" class="suggestions"></div>
+    </div>
+
+    <input type="number" id="itemPrice" placeholder="Price">
+
+    <button onclick="addItem()">Add Item</button>
+
+    <table id="billTable">
+        <tr><th>Item</th><th>Price</th></tr>
+    </table>
+
+    <div class="total" id="total">Total: ₹0</div>
+
+    <button onclick="printBill()">Print</button>
+</div>
+
+<script>
+let total = 0;
+
+// INITIAL MENU (your items)
+let defaultMenu = [
+    {name: "Croissant", price: 199},
+    {name: "Apple Juice", price: 70},
+    {name: "White Sauce Pasta", price: 149},
+    {name: "Red Sauce Pasta", price: 149}
+];
+
+// LOAD OR SAVE MENU
+if(!localStorage.getItem("menu")) {
+    localStorage.setItem("menu", JSON.stringify(defaultMenu));
+}
+
+function getMenu() {
+    return JSON.parse(localStorage.getItem("menu"));
+}
+
+// SHOW DROPDOWN
+function showSuggestions() {
+    let input = document.getElementById("itemName").value.toLowerCase();
+    let menu = getMenu();
+    let box = document.getElementById("suggestions");
+    box.innerHTML = "";
+
+    menu.forEach(item => {
+        if(item.name.toLowerCase().includes(input)) {
+            let div = document.createElement("div");
+            div.innerHTML = item.name + " - ₹" + item.price;
+            div.onclick = () => selectItem(item);
+            box.appendChild(div);
+        }
+    });
+}
+
+// SELECT ITEM
+function selectItem(item) {
+    document.getElementById("itemName").value = item.name;
+    document.getElementById("itemPrice").value = item.price;
+    document.getElementById("suggestions").innerHTML = "";
+}
+
+// ADD ITEM TO BILL
+function addItem() {
+    let name = document.getElementById("itemName").value;
+    let price = parseFloat(document.getElementById("itemPrice").value);
+
+    if(!name || isNaN(price)) {
+        alert("Enter valid item");
+        return;
+    }
+
+    let table = document.getElementById("billTable");
+    let row = table.insertRow();
+
+    row.insertCell(0).innerHTML = name;
+    row.insertCell(1).innerHTML = "₹" + price;
+
+    total += price;
+    document.getElementById("total").innerHTML = "Total: ₹" + total;
+
+    saveToMenu(name, price);
+
+    document.getElementById("itemName").value = "";
+    document.getElementById("itemPrice").value = "";
+}
+
+// SAVE NEW ITEMS
+function saveToMenu(name, price) {
+    let menu = getMenu();
+
+    let exists = menu.find(i => i.name.toLowerCase() === name.toLowerCase());
+    if(!exists) {
+        menu.push({name, price});
+        localStorage.setItem("menu", JSON.stringify(menu));
+    }
+}
+
+// PRINT
+function printBill() {
+    window.print();
+}
+</script>
+
+</body>
+</html>

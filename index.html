@@ -1,193 +1,208 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Naughty Nuts Cafe POS</title>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
 <style>
-body {
-    font-family: Arial;
-    background: #f5f5f5;
-    padding: 20px;
+body { font-family: Arial; background:#f5f5f5; padding:10px;}
+.container { max-width:500px; margin:auto; background:white; padding:15px; border-radius:10px;}
+h2 { text-align:center; }
+
+input, button {
+    width:100%;
+    padding:10px;
+    margin:5px 0;
 }
 
-.container {
-    max-width: 500px;
-    margin: auto;
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-}
+button { background:black; color:white; border:none; }
 
-h1 {
-    text-align: center;
-}
+table { width:100%; margin-top:10px;}
+td, th { padding:5px; border-bottom:1px solid #ddd;}
 
-input {
-    width: 45%;
-    padding: 8px;
-    margin: 5px 2%;
-}
-
-.full { width: 94%; }
-
-button {
-    padding: 10px;
-    width: 100%;
-    background: black;
-    color: white;
-    border: none;
-    margin-top: 10px;
-    cursor: pointer;
-}
-
-table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
-}
-
-th, td {
-    border-bottom: 1px solid #ddd;
-    padding: 8px;
-}
-
-.total {
-    text-align: right;
-    font-weight: bold;
-    margin-top: 10px;
-}
-
-/* dropdown */
 .suggestions {
-    background: white;
-    border: 1px solid #ccc;
-    max-height: 120px;
-    overflow-y: auto;
-    position: absolute;
-    width: 43%;
+    background:white;
+    border:1px solid #ccc;
+    max-height:120px;
+    overflow-y:auto;
 }
+.suggestions div { padding:5px; cursor:pointer;}
+.suggestions div:hover { background:#eee; }
 
-.suggestions div {
-    padding: 5px;
-    cursor: pointer;
-}
-
-.suggestions div:hover {
-    background: #eee;
-}
+.nav { display:flex; gap:5px; }
+.nav button { flex:1; }
 </style>
 </head>
 
 <body>
 
 <div class="container">
-    <h1>NAUGHTY NUTS CAFE</h1>
 
-    <input class="full" id="customer" placeholder="Customer Name">
-    <input class="full" id="table" placeholder="Table Number">
+<div class="nav">
+<button onclick="showPage('billing')">Billing</button>
+<button onclick="showPage('admin')">Admin</button>
+</div>
 
-    <div style="position:relative;">
-        <input type="text" id="itemName" placeholder="Item Name" onkeyup="showSuggestions()">
-        <div id="suggestions" class="suggestions"></div>
-    </div>
+<h2>NAUGHTY NUTS CAFE</h2>
 
-    <input type="number" id="itemPrice" placeholder="Price">
+<!-- BILLING PAGE -->
+<div id="billingPage">
 
-    <button onclick="addItem()">Add Item</button>
+<input id="customer" placeholder="Customer Name">
+<input id="table" placeholder="Table Number">
 
-    <table id="billTable">
-        <tr><th>Item</th><th>Price</th></tr>
-    </table>
+<input id="item" placeholder="Search item..." onkeyup="searchItem()">
+<div id="suggestions" class="suggestions"></div>
 
-    <div class="total" id="total">Total: ₹0</div>
+<input id="qty" type="number" placeholder="Quantity">
+<input id="price" placeholder="Price">
 
-    <button onclick="printBill()">Print</button>
+<button onclick="addItem()">Add Item</button>
+
+<table id="bill">
+<tr><th>Item</th><th>Qty</th><th>Total</th></tr>
+</table>
+
+<h3 id="total">Total: ₹0</h3>
+
+<button onclick="printBill()">🧾 Print & Save</button>
+
+</div>
+
+<!-- ADMIN PAGE -->
+<div id="adminPage" style="display:none;">
+
+<h3>Menu Management</h3>
+<input id="mName" placeholder="Item Name">
+<input id="mPrice" placeholder="Price">
+<button onclick="addMenu()">Add Menu Item</button>
+
+<ul id="menuList"></ul>
+
+<h3>Sales Records</h3>
+<button onclick="loadSales()">Load Sales</button>
+<ul id="salesList"></ul>
+
+</div>
+
 </div>
 
 <script>
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_KEY",
+  authDomain: "PASTE_DOMAIN",
+  projectId: "PASTE_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 let total = 0;
 
-// INITIAL MENU (your items)
-let defaultMenu = [
-    {name: "Croissant", price: 199},
-    {name: "Apple Juice", price: 70},
-    {name: "White Sauce Pasta", price: 149},
-    {name: "Red Sauce Pasta", price: 149}
-];
-
-// LOAD OR SAVE MENU
-if(!localStorage.getItem("menu")) {
-    localStorage.setItem("menu", JSON.stringify(defaultMenu));
+function showPage(page) {
+    billingPage.style.display = page === 'billing' ? 'block' : 'none';
+    adminPage.style.display = page === 'admin' ? 'block' : 'none';
+    if(page === 'admin') loadMenu();
 }
 
-function getMenu() {
-    return JSON.parse(localStorage.getItem("menu"));
-}
+async function searchItem() {
+    let text = item.value.toLowerCase();
+    suggestions.innerHTML = "";
 
-// SHOW DROPDOWN
-function showSuggestions() {
-    let input = document.getElementById("itemName").value.toLowerCase();
-    let menu = getMenu();
-    let box = document.getElementById("suggestions");
-    box.innerHTML = "";
+    let snap = await db.collection("menu").get();
 
-    menu.forEach(item => {
-        if(item.name.toLowerCase().includes(input)) {
+    snap.forEach(doc => {
+        let d = doc.data();
+        if(d.name.toLowerCase().includes(text)) {
             let div = document.createElement("div");
-            div.innerHTML = item.name + " - ₹" + item.price;
-            div.onclick = () => selectItem(item);
-            box.appendChild(div);
+            div.innerHTML = d.name + " - ₹" + d.price;
+            div.onclick = () => {
+                item.value = d.name;
+                price.value = d.price;
+                suggestions.innerHTML = "";
+            };
+            suggestions.appendChild(div);
         }
     });
 }
 
-// SELECT ITEM
-function selectItem(item) {
-    document.getElementById("itemName").value = item.name;
-    document.getElementById("itemPrice").value = item.price;
-    document.getElementById("suggestions").innerHTML = "";
-}
-
-// ADD ITEM TO BILL
 function addItem() {
-    let name = document.getElementById("itemName").value;
-    let price = parseFloat(document.getElementById("itemPrice").value);
+    let name = item.value;
+    let p = parseFloat(price.value);
+    let q = parseInt(qty.value);
 
-    if(!name || isNaN(price)) {
-        alert("Enter valid item");
-        return;
-    }
+    if(!name || isNaN(p) || isNaN(q)) return alert("Enter valid");
 
-    let table = document.getElementById("billTable");
-    let row = table.insertRow();
+    let t = p * q;
 
+    let row = bill.insertRow();
     row.insertCell(0).innerHTML = name;
-    row.insertCell(1).innerHTML = "₹" + price;
+    row.insertCell(1).innerHTML = q;
+    row.insertCell(2).innerHTML = "₹"+t;
 
-    total += price;
-    document.getElementById("total").innerHTML = "Total: ₹" + total;
+    total += t;
+    document.getElementById("total").innerText = "Total: ₹" + total;
 
-    saveToMenu(name, price);
-
-    document.getElementById("itemName").value = "";
-    document.getElementById("itemPrice").value = "";
+    item.value = "";
+    price.value = "";
+    qty.value = "";
 }
 
-// SAVE NEW ITEMS
-function saveToMenu(name, price) {
-    let menu = getMenu();
+async function printBill() {
+    let now = new Date();
 
-    let exists = menu.find(i => i.name.toLowerCase() === name.toLowerCase());
-    if(!exists) {
-        menu.push({name, price});
-        localStorage.setItem("menu", JSON.stringify(menu));
-    }
-}
+    await db.collection("sales").add({
+        table: table.value,
+        total: total,
+        date: now.toLocaleDateString(),
+        time: now.toLocaleTimeString()
+    });
 
-// PRINT
-function printBill() {
     window.print();
+}
+
+async function addMenu() {
+    await db.collection("menu").add({
+        name: mName.value,
+        price: parseFloat(mPrice.value)
+    });
+    alert("Added");
+    loadMenu();
+}
+
+async function loadMenu() {
+    menuList.innerHTML = "";
+    let snap = await db.collection("menu").get();
+
+    snap.forEach(doc => {
+        let d = doc.data();
+
+        let li = document.createElement("li");
+        li.innerHTML = `${d.name} - ₹${d.price}
+        <button onclick="deleteMenu('${doc.id}')">Delete</button>`;
+
+        menuList.appendChild(li);
+    });
+}
+
+async function deleteMenu(id) {
+    await db.collection("menu").doc(id).delete();
+    loadMenu();
+}
+
+async function loadSales() {
+    salesList.innerHTML = "";
+    let snap = await db.collection("sales").get();
+
+    snap.forEach(doc => {
+        let d = doc.data();
+        let li = document.createElement("li");
+        li.innerText = `${d.date} | ${d.table} | ₹${d.total}`;
+        salesList.appendChild(li);
+    });
 }
 </script>
 
